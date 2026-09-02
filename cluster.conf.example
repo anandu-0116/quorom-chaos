@@ -1,0 +1,7 @@
+# quorum-chaos cluster config: one line per node, "<id>,<host:port>".
+# Copy to cluster.conf (or point --config at this file directly) and run
+# each node with its own --id, e.g.:
+#   raft_node --id=0 --config=cluster.conf.example --data_dir=data/node0
+0,127.0.0.1:50050
+1,127.0.0.1:50051
+2,127.0.0.1:50052

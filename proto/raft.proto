@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package quorumchaos;
+
+// Raft leader-election RPCs only. No log entries yet: AppendEntries is a
+// heartbeat, and RequestVote carries no last-log fields since there is no
+// log to compare against. Both are additive, non-breaking proto changes to
+// make later once log replication exists.
+service Raft {
+  rpc RequestVote(RequestVoteArgs) returns (RequestVoteReply);
+  rpc AppendEntries(AppendEntriesArgs) returns (AppendEntriesReply);
+}
+
+message RequestVoteArgs {
+  int64 term = 1;
+  string candidate_id = 2;
+}
+
+message RequestVoteReply {
+  int64 term = 1;
+  bool vote_granted = 2;
+}
+
+// Heartbeat-only: no `entries` field yet.
+message AppendEntriesArgs {
+  int64 term = 1;
+  string leader_id = 2;
+}
+
+message AppendEntriesReply {
+  int64 term = 1;
+  bool success = 2;
+}
