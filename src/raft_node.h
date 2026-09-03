@@ -2,6 +2,8 @@
 
 #include <grpcpp/grpcpp.h>
 
+#include <chrono>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -31,6 +33,11 @@ class RaftNode final : public Raft::Service {
   grpc::Status AppendEntries(grpc::ServerContext* context,
                               const AppendEntriesArgs* request,
                               AppendEntriesReply* reply) override;
+  // Pre-Vote: side-effect-free canvass run before a real election. Never
+  // mutates currentTerm/votedFor and never resets election_timer_.
+  grpc::Status RequestPreVote(grpc::ServerContext* context,
+                               const RequestVoteArgs* request,
+                               RequestVoteReply* reply) override;
 
  private:
   enum class Role { Follower, Candidate, Leader };
@@ -49,6 +56,10 @@ class RaftNode final : public Raft::Service {
   void SendRequestVoteToPeer(PeerAddress peer, int64_t term, int total_nodes);
   void BroadcastHeartbeats(int64_t term);
   void SendHeartbeatToPeer(PeerAddress peer, int64_t term);
+  void BroadcastRequestPreVote(int64_t prospective_term, uint64_t round,
+                                int total_nodes);
+  void SendRequestPreVoteToPeer(PeerAddress peer, int64_t prospective_term,
+                                 uint64_t round, int total_nodes);
 
   // State-machine transitions. Caller must already hold mutex_.
   void SetRoleLocked(Role role);
@@ -66,6 +77,14 @@ class RaftNode final : public Raft::Service {
   PersistentState state_;       // currentTerm, votedFor -- guarded by mutex_
   Role role_ = Role::Follower;  // guarded by mutex_
   int votes_received_ = 0;      // guarded by mutex_; meaningful only while Candidate
+
+  // Pre-Vote bookkeeping -- guarded by mutex_. last_leader_contact_ is
+  // stamped only when a term-valid heartbeat is accepted in AppendEntries;
+  // pre_vote_round_/pre_votes_received_ track the in-flight canvass
+  // started by the most recent OnElectionTimeout().
+  std::chrono::steady_clock::time_point last_leader_contact_;
+  uint64_t pre_vote_round_ = 0;
+  int pre_votes_received_ = 0;
 
   ElectionTimer election_timer_;  // [150ms, 300ms); drives Follower/Candidate timeout
   ElectionTimer heartbeat_timer_; // fixed 50ms; drives Leader's heartbeats

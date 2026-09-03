@@ -40,7 +40,31 @@ build/raft_node --id=0 --config=cluster.conf.example --data_dir=data/node0
 Implemented: `RequestVote`/`AppendEntries` (heartbeat-only) RPCs,
 Follower/Candidate/Leader transitions, randomized election timeout in
 `[150ms, 300ms)`, persistent `currentTerm`/`votedFor` written to disk before
-any RPC reply.
+any RPC reply, and the Pre-Vote extension (see below).
 
 Not yet implemented: log entries, log replication, client-facing API,
 snapshotting, membership changes.
+
+## Pre-Vote
+
+Before bumping its term and starting a real election, a node first
+canvasses peers with `RequestPreVote` -- a side-effect-free "would you vote
+for me?" that never touches `currentTerm`/`votedFor` and never resets
+anyone's election timer. A peer grants it only if it hasn't heard a valid
+heartbeat from a leader within the last election timeout. Only a Pre-Vote
+majority triggers a real election.
+
+This exists to stop a node that's merely *network-partitioned* (not
+crashed) from disrupting a healthy cluster. Without it, an isolated node's
+election timer keeps firing every ~150-300ms with nobody to hear from, and
+each timeout unconditionally increments `currentTerm` -- so a node cut off
+for a few minutes can come back holding a term far ahead of the real
+leader's. The instant it reaches anyone, Raft's own safety rule ("adopt any
+higher term you see") forces the healthy leader to step down, even though
+it had a stable quorum the whole time. With Pre-Vote, the isolated node's
+peers are all still hearing from the real leader, so they refuse every
+canvass -- the isolated node's term never actually advances, and it rejoins
+quietly the moment it's reachable again.
+
+Reference: Ongaro's Raft dissertation, §4.2.3 and §9.6 (the same mechanism
+etcd/raft and TiKV's raft-rs ship as `PreVote`).

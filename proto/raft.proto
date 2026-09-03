@@ -9,6 +9,14 @@ package quorumchaos;
 service Raft {
   rpc RequestVote(RequestVoteArgs) returns (RequestVoteReply);
   rpc AppendEntries(AppendEntriesArgs) returns (AppendEntriesReply);
+
+  // Pre-Vote (Raft dissertation §4.2.3/§9.6): a side-effect-free canvass a
+  // node runs before bumping its real term and starting a real election.
+  // Reuses RequestVoteArgs/Reply -- same question, no commitment. Prevents
+  // a node that's merely network-partitioned (not crashed) from inflating
+  // currentTerm while it can't reach anyone, which would otherwise let it
+  // disrupt a healthy leader the moment the partition heals.
+  rpc RequestPreVote(RequestVoteArgs) returns (RequestVoteReply);
 }
 
 message RequestVoteArgs {
